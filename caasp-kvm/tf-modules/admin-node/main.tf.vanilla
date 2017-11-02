@@ -1,0 +1,34 @@
+# admin node without any injected resources from the host. Useful to reproduce
+# customer bugs or to perform QA tasks
+
+resource "libvirt_domain" "admin" {
+  name      = "caasp_admin"
+  memory    = "${var.caasp_admin_memory}"
+  vcpu      = "${var.caasp_admin_vcpu}"
+  metadata   = "caasp-admin.${var.caasp_domain_name},admin,${count.index}"
+  cloudinit = "${libvirt_cloudinit.admin.id}"
+
+  disk {
+    volume_id = "${libvirt_volume.admin.id}"
+  }
+
+  network_interface {
+    network_id     = "${var.network_id}"
+    hostname       = "caasp-admin"
+    addresses      = ["${cidrhost("${var.caasp_net_network}", 256)}"]
+    wait_for_lease = 1
+  }
+
+  graphics {
+    type        = "vnc"
+    listen_type = "address"
+  }
+}
+
+output "libvirt_id" {
+  value = "${libvirt_domain.admin.id}"
+}
+
+output "ip" {
+  value = "${libvirt_domain.admin.network_interface.0.addresses.0}"
+}

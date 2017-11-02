@@ -1,0 +1,82 @@
+# admin node with injected resources from the host. Useful for devenv
+
+resource "libvirt_domain" "admin" {
+  name      = "caasp_admin"
+  memory    = "${var.caasp_admin_memory}"
+  vcpu      = "${var.caasp_admin_vcpu}"
+  metadata   = "caasp-admin.${var.caasp_domain_name},admin,${count.index}"
+  cloudinit = "${libvirt_cloudinit.admin.id}"
+
+  disk {
+    volume_id = "${libvirt_volume.admin.id}"
+  }
+
+  network_interface {
+    network_id     = "${var.network_id}"
+    hostname       = "caasp-admin"
+    addresses      = ["${cidrhost("${var.caasp_net_network}", 256)}"]
+    wait_for_lease = 1
+  }
+
+  graphics {
+    type        = "vnc"
+    listen_type = "address"
+  }
+
+  filesystem {
+    source = "${var.kubic_salt_dir}"
+    target = "salt"
+    readonly = true
+  }
+
+  filesystem {
+    source = "${var.modified_container_manifests_dir}"
+    target = "caasp-container-manifests"
+    readonly = true
+  }
+
+  filesystem {
+    source = "${var.kubic_velum_dir}"
+    target = "velum"
+    readonly = true
+  }
+
+  filesystem {
+    source = "${var.devel_scripts_dir}"
+    target = "devel-scripts"
+    readonly = true
+  }
+
+  filesystem {
+    source = "${var.docker_images_dir}"
+    target = "devel-docker-images"
+    readonly = true
+  }
+
+  connection {
+    type     = "ssh"
+    user     = "root"
+    password = "linux"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "while [[ ! -f /var/run/docker.pid ]]; do echo waiting for docker to start; sleep 1; done",
+      "docker load -i /var/lib/misc/devel-docker-images/*.tar",
+    ]
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "for i in `ls -1 /opt/bin/autorun*.sh /opt/bin/autorun*/*.sh` ; do sh $i ; done",
+    ]
+  }
+}
+
+output "libvirt_id" {
+  value = "${libvirt_domain.admin.id}"
+}
+
+output "ip" {
+  value = "${libvirt_domain.admin.network_interface.0.addresses.0}"
+}

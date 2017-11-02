@@ -122,93 +122,25 @@ resource "libvirt_network" "network" {
 ##############
 # Admin node #
 ##############
-resource "libvirt_volume" "admin" {
-  name           = "caasp_admin.qcow2"
-  pool           = "${var.pool}"
-  base_volume_id = "${libvirt_volume.caasp_img.id}"
-}
 
-resource "libvirt_cloudinit" "admin" {
-  name      = "caasp_admin_cloud_init.iso"
-  pool      = "${var.pool}"
-  user_data = "${file("cloud-init/admin.cfg")}"
-}
-
-resource "libvirt_domain" "admin" {
-  name      = "caasp_admin"
-  memory    = "${var.caasp_admin_memory}"
-  vcpu      = "${var.caasp_admin_vcpu}"
-  metadata   = "caasp-admin.${var.caasp_domain_name},admin,${count.index}"
-  cloudinit = "${libvirt_cloudinit.admin.id}"
-
-  disk {
-    volume_id = "${libvirt_volume.admin.id}"
-  }
-
-  network_interface {
-    network_id     = "${libvirt_network.network.id}"
-    hostname       = "caasp-admin"
-    addresses      = ["${cidrhost("${var.caasp_net_network}", 256)}"]
-    wait_for_lease = 1
-  }
-
-  graphics {
-    type        = "vnc"
-    listen_type = "address"
-  }
-
-  filesystem {
-    source = "${var.kubic_salt_dir}"
-    target = "salt"
-    readonly = true
-  }
-
-  filesystem {
-    source = "${path.module}/injected-caasp-container-manifests"
-    target = "caasp-container-manifests"
-    readonly = true
-  }
-
-  filesystem {
-    source = "${var.kubic_velum_dir}"
-    target = "velum"
-    readonly = true
-  }
-
-  filesystem {
-    source = "${path.module}/resources/scripts"
-    target = "devel-scripts"
-    readonly = true
-  }
-
-  filesystem {
-    source = "${path.module}/resources/docker-images"
-    target = "devel-docker-images"
-    readonly = true
-  }
-
-  connection {
-    type     = "ssh"
-    user     = "root"
-    password = "linux"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "while [[ ! -f /var/run/docker.pid ]]; do echo waiting for docker to start; sleep 1; done",
-      "docker load -i /var/lib/misc/devel-docker-images/*.tar",
-    ]
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "for i in `ls -1 /opt/bin/autorun*.sh /opt/bin/autorun*/*.sh` ; do sh $i ; done",
-    ]
-  }
+module "admin" {
+  source                           = "./tf-modules/admin-node"
+  pool                             = "${var.pool}"
+  base_volume_id                   = "${libvirt_volume.caasp_img.id}"
+  caasp_admin_memory               = "${var.caasp_admin_memory}"
+  caasp_admin_vcpu                 = "${var.caasp_admin_vcpu}"
+  caasp_domain_name                = "${var.caasp_domain_name}"
+  network_id                       = "${libvirt_network.network.id}"
+  caasp_net_network                = "${var.caasp_net_network}"
+  kubic_velum_dir                  = "${var.kubic_velum_dir}"
+  kubic_salt_dir                   = "${var.kubic_salt_dir}"
+  docker_images_dir                = "${path.module}/resources/docker-images"
+  modified_container_manifests_dir = "${path.module}/injected-caasp-container-manifests"
+  devel_scripts_dir                = "${path.module}/resources/scripts"
 }
 
 output "ip_admin" {
-  value = "${libvirt_domain.admin.network_interface.0.addresses.0}"
+  value = "${module.admin.ip}"
 }
 
 ###################
@@ -228,10 +160,10 @@ data "template_file" "master_cloud_init_user_data" {
   template = "${file("cloud-init/master.cfg.tpl")}"
 
   vars {
-    admin_ip = "${libvirt_domain.admin.network_interface.0.addresses.0}"
+    admin_ip = "${module.admin.ip}"
   }
 
-  depends_on = ["libvirt_domain.admin"]
+  depends_on = ["module.admin"]
 }
 
 resource "libvirt_cloudinit" "master" {
@@ -249,7 +181,7 @@ resource "libvirt_domain" "master" {
   vcpu       = "${var.caasp_master_vcpu}"
   cloudinit  = "${element(libvirt_cloudinit.master.*.id, count.index)}"
   metadata   = "caasp-master-${count.index}.${var.caasp_domain_name},master,${count.index}"
-  depends_on = ["libvirt_domain.admin"]
+  depends_on = ["module.admin"]
 
   disk {
     volume_id = "${element(libvirt_volume.master.*.id, count.index)}"
@@ -302,10 +234,10 @@ data "template_file" "worker_cloud_init_user_data" {
   template = "${file("cloud-init/worker.cfg.tpl")}"
 
   vars {
-    admin_ip = "${libvirt_domain.admin.network_interface.0.addresses.0}"
+    admin_ip = "${module.admin.ip}"
   }
 
-  depends_on = ["libvirt_domain.admin"]
+  depends_on = ["module.admin"]
 }
 
 resource "libvirt_cloudinit" "worker" {
@@ -323,7 +255,7 @@ resource "libvirt_domain" "worker" {
   vcpu       = "${var.caasp_worker_vcpu}"
   cloudinit  = "${element(libvirt_cloudinit.worker.*.id, count.index)}"
   metadata   = "caasp-worker-${count.index}.${var.caasp_domain_name},worker,${count.index}"
-  depends_on = ["libvirt_domain.admin"]
+  depends_on = ["module.admin"]
 
   disk {
     volume_id = "${element(libvirt_volume.worker.*.id, count.index)}"
