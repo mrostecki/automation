@@ -65,7 +65,7 @@ variable "caasp_worker_vcpu" {
 variable "caasp_domain_name" {
   type        = "string"
   default     = "devenv.caasp.suse.net"
-  description = "The amount of virtual CPUs for a worker"
+  description = "The default domain name"
 }
 
 variable "caasp_net_mode" {
