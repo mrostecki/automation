@@ -8,7 +8,7 @@ DIR="$( cd "$( dirname "$0" )" && pwd )"
 ACTION=
 RUN_BUILD=
 RUN_DESTROY=
-ENABLE_DEVENV=
+VANILLA=
 
 MASTERS=${CAASP_NUM_MASTERS:-1}
 WORKERS=${CAASP_NUM_WORKERS:-2}
@@ -39,7 +39,7 @@ Usage:
     -m|--masters <INT>     Number of masters to build (Default: CAASP_NUM_MASTERS=$MASTERS)
     -w|--workers <INT>     Number of workers to build (Default: CAASP_NUM_WORKERS=$WORKERS)
     -i|--image <STR>       Image to use (Default: CAASP_IMAGE=$IMAGE)
-    -d|--devenv            Enable devenv (Default: false)
+    --vanilla              Do not inject devenv code, use vanilla caasp (Default: false)
 
   * Destroying a cluster
 
@@ -96,8 +96,8 @@ while [[ $# > 0 ]] ; do
       ACTION=1
       RUN_BUILD=1
       ;;
-    -d|--devenv)
-      ENABLE_DEVENV=1
+    --vanilla)
+      VANILLA=1
       ;;
     -m|--masters)
       MASTERS="$2"
@@ -206,7 +206,10 @@ build() {
   # ln -f fails when the link already exists and points to the same file
   rm -f tf-modules/admin-node/main.tf
 
-  if [ -n "$ENABLE_DEVENV" ] ; then
+  if [ -n "$VANILLA" ] ; then
+    log "devenv mode disabled"
+    ln -s $(realpath tf-modules/admin-node/main.tf.vanilla) $(realpath tf-modules/admin-node/main.tf)
+  else
     log "devenv mode enabled"
     ln -s $(realpath tf-modules/admin-node/main.tf.devenv) $(realpath tf-modules/admin-node/main.tf)
 
@@ -227,9 +230,6 @@ build() {
     else
       log "Skipping Velum environment"
     fi
-  else
-    log "devenv mode disabled"
-    ln -s $(realpath tf-modules/admin-node/main.tf.vanilla) $(realpath tf-modules/admin-node/main.tf)
   fi
 
   log "Applying terraform configuration"
