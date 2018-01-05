@@ -35,7 +35,7 @@ http://ca.suse.de . As root:
 The user running `caasp-kvm` must be a member of a few additional groups:
 
     # replace <username> with your username
-    usermod -aG docker,libvirtd <username>
+    usermod -aG docker,libvirt <username>
 
 A libvirt storage pool must exist, for example:
 
